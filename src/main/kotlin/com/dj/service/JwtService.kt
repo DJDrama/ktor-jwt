@@ -3,14 +3,14 @@ package com.dj.service
 import com.auth0.jwt.JWT
 import com.auth0.jwt.JWTVerifier
 import com.auth0.jwt.algorithms.Algorithm
-import com.dj.routing.request.LoginRequest
+import com.dj.repository.UserRepository
 import io.ktor.server.application.*
 import io.ktor.server.auth.jwt.*
 import java.util.*
 
 class JwtService(
     private val application: Application,
-    private val userService: UserService
+    private val userRepository: UserRepository
 ) {
 
     private val secret = getConfigProperty(path = "jwt.secret")
@@ -20,35 +20,38 @@ class JwtService(
     private val algorithm = Algorithm.HMAC256(secret)
 
     val realm = getConfigProperty(path = "jwt.realm")
+
     val jwtVerifier: JWTVerifier = JWT.require(algorithm)
         .withAudience(audience)
         .withIssuer(issuer)
         .build()
 
-    fun createJwtToken(loginRequest: LoginRequest): String? {
-        val foundUser = userService.findByUsername(username = loginRequest.username)
+    fun createAccessToken(username: String): String =
+        createJwtToken(username = username, expireIn = 3_600_000) // 1 hour
 
-        return if (foundUser != null && foundUser.password == loginRequest.password) {
-            JWT.create()
-                .withAudience(audience)
-                .withIssuer(issuer)
-                .withClaim("username", foundUser.username)
-                .withExpiresAt(Date(System.currentTimeMillis() + 3_600_000))
-                .sign(algorithm)
-        } else {
-            null
-        }
-    }
+    fun createRefreshToken(username: String): String =
+        createJwtToken(username = username, expireIn = 86_400_00) // 24 hours
+
+    private fun createJwtToken(username: String, expireIn: Int): String =
+        JWT.create()
+            .withAudience(audience)
+            .withIssuer(issuer)
+            .withClaim("username", username)
+            .withExpiresAt(Date(System.currentTimeMillis() + expireIn))
+            .sign(algorithm)
 
     fun customValidator(credential: JWTCredential): JWTPrincipal? {
         val username = extractUsername(credential)
-        val foundUser = username?.let(userService::findByUsername)
+        val foundUser = username?.let(userRepository::findByUsername)
         return foundUser?.let {
             if (audienceMatches(credential)) {
                 JWTPrincipal(credential.payload)
             } else null
         }
     }
+
+    fun audienceMatches(audience: String): Boolean =
+        this.audience == audience
 
     private fun audienceMatches(credential: JWTCredential): Boolean =
         credential.payload.audience.contains(audience)

@@ -1,6 +1,8 @@
 package com.dj
 
-import com.dj.plugins.*
+import com.dj.plugins.configureSecurity
+import com.dj.plugins.configureSerialization
+import com.dj.repository.RefreshTokenRepository
 import com.dj.repository.UserRepository
 import com.dj.routing.configureRouting
 import com.dj.service.JwtService
@@ -14,10 +16,15 @@ fun Application.module() {
     configureSerialization()
 
     val userRepository = UserRepository()
-    val userService = UserService(repository = userRepository)
+    val refreshTokenRepository = RefreshTokenRepository()
+    val jwtService = JwtService(application = this, userRepository = userRepository)
+    val userService = UserService(
+        userRepository = userRepository,
+        jwtService = jwtService,
+        refreshTokenRepository = refreshTokenRepository
+    )
 
-    val jwtService = JwtService(application = this, userService = userService)
     configureSecurity(jwtService = jwtService)
-    configureRouting(userService = userService, jwtService = jwtService)
+    configureRouting(userService = userService)
 
 }
