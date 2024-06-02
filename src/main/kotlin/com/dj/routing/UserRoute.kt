@@ -4,6 +4,7 @@ import User
 import com.dj.routing.request.UserRequest
 import com.dj.routing.response.UserResponse
 import com.dj.service.UserService
+import com.dj.util.authorized
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -28,28 +29,31 @@ fun Route.userRoute(userService: UserService) {
         )
     }
     authenticate {
-        get {
-            val users = userService.findAll()
-            call.respond(
-                message = users.map(User::toResponse)
-            )
+        authorized("ADMIN") {
+            get {
+                val users = userService.findAll()
+                call.respond(
+                    message = users.map(User::toResponse)
+                )
+            }
         }
-
     }
     authenticate("another-auth") {
-        get("/{id}") {
-            val id: String = call.parameters["id"]
-                ?: return@get call.respond(message = HttpStatusCode.BadRequest)
+        authorized("USER", "ADMIN") {
+            get("/{id}") {
+                val id: String = call.parameters["id"]
+                    ?: return@get call.respond(message = HttpStatusCode.BadRequest)
 
-            val foundUser = userService.findById(id = id)
-                ?: return@get call.respond(message = HttpStatusCode.NotFound)
+                val foundUser = userService.findById(id = id)
+                    ?: return@get call.respond(message = HttpStatusCode.NotFound)
 
-            if (foundUser.username != extractPrincipalUsername(call))
-                return@get call.respond(HttpStatusCode.NotFound)
+                if (foundUser.username != extractPrincipalUsername(call))
+                    return@get call.respond(HttpStatusCode.NotFound)
 
-            call.respond(
-                message = foundUser.toResponse()
-            )
+                call.respond(
+                    message = foundUser.toResponse()
+                )
+            }
         }
     }
 }
@@ -63,10 +67,12 @@ fun extractPrincipalUsername(call: ApplicationCall): String? =
 private fun UserRequest.toModel() = User(
     id = UUID.randomUUID(),
     username = this.username,
-    password = this.password
+    password = this.password,
+    role = role,
 )
 
 private fun User.toResponse() = UserResponse(
     id = id,
-    username = username
+    username = username,
+    role = role,
 )
